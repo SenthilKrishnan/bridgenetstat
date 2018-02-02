@@ -1,0 +1,52 @@
+#!/bin/bash
+
+home_path=/var/log/telegraf/br-net
+
+hosts=(set1 set2 set3)
+
+cd $home_path
+
+for host in ${hosts[*]}
+do
+        if [ ! -d $host ] ; then mkdir -p $host ; fi
+
+        scp -r -i ~/.ssh/id_ansible $host:$home_path/br-ifs $host/
+
+        files="$files `ls $host/br-ifs`"
+done
+
+mkdir -p merge
+mkdir -p new-merge
+
+# find unique file names
+files=`for f in $files ; do echo $f ; done | sort -u`
+
+for f in $files ;
+do
+        cat */br-ifs/$f | sort -u > new-merge/$f
+done
+
+diff -q merge new-merge >/dev/null
+if [ $? -ne 0 ] ; then
+        cp -f new-merge/* merge/
+
+        > /etc/telegraf/telegraf.d/openstack-br.conf
+        for f in $files ;
+        do
+                ifs=(`cat merge/$f`)
+                cat >>/etc/telegraf/telegraf.d/openstack-br.conf <<END
+[[inputs.net]]
+  name_suffix = "-$f"
+  interfaces = [`printf '"%s", ' "${ifs[@]}"`]
+
+END
+        done
+
+
+        # Copy to all servers and restart telegraf
+        for host in ${hosts[*]}
+        do
+                scp -i ~/.ssh/id_ansible /etc/telegraf/telegraf.d/openstack-br.conf $host:/etc/telegraf/telegraf.d/openstack-br.conf
+                scp -i ~/.ssh/id_ansible $host "systemctl restart telegraf"
+        done
+fi
