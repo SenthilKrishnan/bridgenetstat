@@ -1,0 +1,14 @@
+#!/bin/bash
+
+PATH=$PATH:/usr/sbin/
+
+home_path=/var/log/telegraf
+
+if [ ! -d $home_path/br-net/br-ifs ] ; then
+        mkdir -p $home_path/br-net/br-ifs
+fi
+
+cd $home_path/br-net/br-ifs
+
+# get interfaces for each bridge
+brctl show | tail -n +2 | gawk -F "\t" '{ if ($1 != "") { brname=$1; print "" >brname; } print $NF >> brname}'
